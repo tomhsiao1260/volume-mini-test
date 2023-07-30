@@ -1,17 +1,20 @@
 import ViewerCore from "./core/ViewerCore"
 
-let id = 0
 const viewer = new ViewerCore()
+modeA(viewer, 0)
 
-// init setup
-viewer.init()
-    .then(() => viewer.updateID(id))
-    .then(() => { console.log(`id ${id} is loaded (first load)`) })
-
-// press space for the next
 document.addEventListener('keydown', function(event) {
-    if (event.code === 'Space') {
-        id ++
-        viewer.updateID(id).then(() => { console.log(`id ${id} is loaded`) })
-    }
+    if (event.code === 'Digit0') { modeA(viewer, 0) }
+    if (event.code === 'Digit1') { modeA(viewer, 1) }
+    if (event.code === 'Digit2') { modeA(viewer, 2) }
 })
+
+function modeA(viewer, id) {
+    viewer.clear()
+
+    viewer.mode = 'volume'
+    const volume = viewer.updateVolume(id)
+
+    volume.then(() => viewer.render())
+        .then(() => { console.log(`id ${id} is loaded`) })
+}
