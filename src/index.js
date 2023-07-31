@@ -1,12 +1,12 @@
 import ViewerCore from './core/ViewerCore'
 
 const viewer = new ViewerCore()
-modeB(viewer, 0)
+modeC(viewer, 0)
 
 document.addEventListener('keydown', function(event) {
-    if (event.code === 'Digit0') { modeB(viewer, 0) }
-    if (event.code === 'Digit1') { modeB(viewer, 1) }
-    if (event.code === 'Digit2') { modeB(viewer, 2) }
+    if (event.code === 'Digit0') { modeA(viewer, 0) }
+    if (event.code === 'Digit1') { modeB(viewer, 0) }
+    if (event.code === 'Digit2') { modeC(viewer, 0) }
 })
 
 function modeA(viewer, id) {
@@ -23,4 +23,16 @@ function modeB(viewer, id) {
 
     segment.then(() => viewer.render('segment'))
         .then(() => { console.log(`segment ${id} is loaded`) })
+}
+
+function modeC(viewer, id) {
+    viewer.clear()
+    const volume = viewer.updateVolume(id)
+    const segment = viewer.updateSegment(id)
+
+    Promise.all([volume, segment])
+        .then(() => viewer.clipSegment(id))
+        .then(() => viewer.updateSegmentSDF(id))
+        .then(() => viewer.render('volume-segment'))
+        .then(() => { console.log(`volume-segment ${id} is loaded`) })
 }

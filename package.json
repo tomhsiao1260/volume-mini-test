@@ -12,6 +12,7 @@
     "vite": "^4.3.9"
   },
   "dependencies": {
-    "three": "^0.154.0"
+    "three": "^0.154.0",
+    "three-mesh-bvh": "^0.6.3"
   }
 }

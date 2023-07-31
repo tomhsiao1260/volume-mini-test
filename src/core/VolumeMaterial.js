@@ -11,8 +11,11 @@ export class VolumeMaterial extends ShaderMaterial {
       },
 
       uniforms: {
+        surface: { value: 0 },
+        sdfTex: { value: null },
         voldata: { value: null },
         cmdata: { value: null },
+        segmentMode: { value: false },
         size: { value: new Vector3() },
         clim: { value: new Vector2() },
         renderthreshold: { value: 0 },
@@ -42,6 +45,7 @@ export class VolumeMaterial extends ShaderMaterial {
         uniform float renderthreshold;
         uniform float surface;
         uniform int renderstyle;
+        uniform bool segmentMode;
 
         const float relative_step_size = 1.0;
         const vec4 ambient_color = vec4(0.2, 0.4, 0.2, 1.0);
@@ -105,15 +109,64 @@ export class VolumeMaterial extends ShaderMaterial {
             // gl_FragColor = vec4(0.0, float(nsteps) / size.x, 1.0, 1.0);
             // return;
 
-            float thickness = length((sdfTransformInverse * (farPoint - nearPoint)).xyz);
-            vec3 step = sdfRayDirection * thickness / float(nsteps);
-            vec3 uv = (sdfTransformInverse * nearPoint).xyz + vec3( 0.5 );
+            if (segmentMode) {
+              // ray march (near -> surface)
+              for ( int i = 0; i < MAX_STEPS; i ++ ) {
+                // sdf box extends from - 0.5 to 0.5
+                // transform into the local bounds space [ 0, 1 ] and check if we're inside the bounds
+                vec3 uv = ( sdfTransformInverse * nearPoint ).xyz + vec3( 0.5 );
+                if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || uv.z < 0.0 || uv.z > 1.0 ) {
+                  break;
+                }
+                // get the distance to surface and exit the loop if we're close to the surface
+                float distanceToSurface = texture2D( sdfTex, uv ).r - surface;
+                if ( distanceToSurface < SURFACE_EPSILON ) {
+                  intersectsSurface = true;
+                  break;
+                }
+                // step the ray
+                nearPoint.xyz += rayDirection * abs( distanceToSurface );
+              }
 
-            if (renderstyle == 0)
-              cast_mip(uv, step, nsteps, sdfRayDirection);
-            else if (renderstyle == 1)
-              cast_iso(uv, step, nsteps, sdfRayDirection);
-            return;
+              // ray march (far -> surface)
+              for ( int i = 0; i < MAX_STEPS; i ++ ) {
+                // sdf box extends from - 0.5 to 0.5
+                // transform into the local bounds space [ 0, 1 ] and check if we're inside the bounds
+                vec3 uv = ( sdfTransformInverse * farPoint ).xyz + vec3( 0.5 );
+                if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || uv.z < 0.0 || uv.z > 1.0 ) {
+                  break;
+                }
+                // get the distance to surface and exit the loop if we're close to the surface
+                float distanceToSurface = texture2D( sdfTex, uv ).r - surface;
+                if ( distanceToSurface < SURFACE_EPSILON ) {
+                  intersectsSurface = true;
+                  break;
+                }
+                // step the ray
+                farPoint.xyz -= rayDirection * abs( distanceToSurface );
+              }
+            } else {
+              intersectsSurface = true;
+            }
+
+            // volume rendering
+            if ( intersectsSurface ) {
+              float thickness = length((sdfTransformInverse * (farPoint - nearPoint)).xyz);
+
+              if (segmentMode) {
+                nsteps = int(thickness * size.x / relative_step_size + 0.5);
+                if ( nsteps < 1 ) discard;
+              }
+
+              vec3 step = sdfRayDirection * thickness / float(nsteps);
+              vec3 uv = (sdfTransformInverse * nearPoint).xyz + vec3( 0.5 );
+
+              if (renderstyle == 0)
+                cast_mip(uv, step, nsteps, sdfRayDirection);
+              else if (renderstyle == 1)
+                cast_iso(uv, step, nsteps, sdfRayDirection);
+              return;
+            }
 
             if (gl_FragColor.a < 0.05)
              discard;

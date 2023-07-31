@@ -1,11 +1,14 @@
 import * as THREE from 'three'
 import textureViridis from './textures/cm_viridis.png'
+import { MeshBVH } from 'three-mesh-bvh'
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js'
 import { NRRDLoader } from 'three/examples/jsm/loaders/NRRDLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { VolumeMaterial } from './VolumeMaterial.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+
+import { VolumeMaterial } from './VolumeMaterial.js'
+import { GenerateSDFMaterial } from './GenerateSDFMaterial.js'
 
 export default class ViewerCore {
   constructor() {
@@ -15,16 +18,17 @@ export default class ViewerCore {
     this.mode = null
 
     this.mesh = null
+    this.sdfTex = null
     this.volumeTex = null
     this.volumeMeta = null
     this.volumeTarget = null
     this.segmentMeta = null
+    this.clipGeometry = null
 
     this.render = this.render.bind(this)
     this.canvas = document.querySelector('.webgl')
     this.inverseBoundsMatrix = new THREE.Matrix4()
     this.cmtextures = { viridis: new THREE.TextureLoader().load(textureViridis) }
-
     this.volumePass = new FullScreenQuad(new VolumeMaterial())
 
     this.init()
@@ -64,13 +68,16 @@ export default class ViewerCore {
   }
 
   clear() {
-    if (this.volumeTex) { this.volumeTex.dispose() }
+    if (this.sdfTex) { this.sdfTex.dispose(); this.sdfTex = null }
+    if (this.volumeTex) { this.volumeTex.dispose(); this.volumeTex = null }
+    if (this.clipGeometry) { this.clipGeometry.dispose(); this.clipGeometry = null }
 
     if (this.mesh) {
       this.mesh.geometry.dispose()
       this.mesh.material.dispose()
       this.scene.remove(this.mesh)
-    }  
+      this.mesh = null
+    } 
   }
 
   async updateVolume(id) {
@@ -138,7 +145,7 @@ export default class ViewerCore {
     await Promise.all(segmentList)
 
     // turn all segment into single geometry
-    const geometry = BufferGeometryUtils.mergeGeometries(geometryList, true)
+    const geometry = BufferGeometryUtils.mergeGeometries(geometryList)
     const material = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
 
     const scalar = 1 / vc.w
@@ -153,6 +160,95 @@ export default class ViewerCore {
     for (let i = 0; i < geometryList.length; i ++) { geometryList[i].dispose() }
   }
 
+  clipSegment(id) {
+    const volumeTarget = this.volumeMeta.nrrd[id]
+    const clip = volumeTarget.clip
+    const nrrd = volumeTarget.shape
+
+    let select = false
+    const s = 1 / Math.max(nrrd.w, nrrd.h, nrrd.d)
+
+    const geometry = this.mesh.geometry
+    const positions = geometry.getAttribute('position').array
+    const normals = geometry.getAttribute('normal').array
+    const uvs = geometry.getAttribute('uv').array
+
+    const c_positions = []
+    const c_normals = []
+    const c_uvs = []
+
+    const boundingBox = new THREE.Box3(
+      new THREE.Vector3(clip.x, clip.y, clip.z),
+      new THREE.Vector3(clip.x + clip.w, clip.y + clip.h, clip.z + clip.d)
+    )
+
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i + 0]
+      const y = positions[i + 1]
+      const z = positions[i + 2]
+
+      if (i % 9 == 0) { select = boundingBox.containsPoint(new THREE.Vector3(x, y, z)) }
+
+      if (select) {
+        const newX = nrrd.w * s * ((x - clip.x) / clip.w - 0.5)
+        const newY = nrrd.h * s * ((y - clip.y) / clip.h - 0.5)
+        const newZ = nrrd.d * s * ((z - clip.z) / clip.d - 0.5)
+
+        c_positions.push(newX, newY, newZ)
+        c_uvs.push(uvs[2 * i + 0], uvs[2 * i + 1])
+        c_normals.push(normals[3 * i + 0], normals[3 * i + 1], normals[3 * i + 2])
+      }
+    }
+
+    this.clipGeometry = new THREE.BufferGeometry()
+    this.clipGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c_positions), 3))
+    this.clipGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(c_uvs), 2))
+    this.clipGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(c_normals), 3))
+  }
+
+  updateSegmentSDF(id) {
+    const volumeTarget = this.volumeMeta.nrrd[id]
+    const clip = volumeTarget.clip
+    const nrrd = volumeTarget.shape
+
+    const r = 1.0
+    const s = 1 / Math.max(nrrd.w, nrrd.h, nrrd.d)
+
+    // create a new 3d render target texture
+    this.sdfTex = new THREE.WebGL3DRenderTarget(nrrd.w * r, nrrd.h * r, nrrd.d * r)
+    this.sdfTex.texture.format = THREE.RedFormat
+    // this.sdfTex.texture.format = THREE.RGFormat
+    this.sdfTex.texture.type = THREE.FloatType
+    this.sdfTex.texture.minFilter = THREE.LinearFilter
+    this.sdfTex.texture.magFilter = THREE.LinearFilter
+
+    // prep the sdf generation material pass
+    const matrix = new THREE.Matrix4()
+    const center = new THREE.Vector3()
+    const quat = new THREE.Quaternion()
+    const scaling = new THREE.Vector3()
+
+    scaling.set(nrrd.w * s, nrrd.h * s, nrrd.d * s)
+    matrix.compose(center, quat, scaling)
+
+    const bvh = new MeshBVH(this.clipGeometry, { maxLeafTris: 1 })
+    const generateSdfPass = new FullScreenQuad(new GenerateSDFMaterial())
+    generateSdfPass.material.uniforms.bvh.value.updateFrom(bvh)
+    generateSdfPass.material.uniforms.matrix.value.copy(matrix)
+
+    // render into each layer
+    const pxWidth = 1 / (nrrd.d * r)
+    const halfWidth = 0.5 * pxWidth
+
+    for (let i = 0; i < nrrd.d * r; i++) {
+      generateSdfPass.material.uniforms.zValue.value = i * pxWidth + halfWidth
+      this.renderer.setRenderTarget(this.sdfTex, i)
+      generateSdfPass.render(this.renderer)
+    }
+    this.renderer.setRenderTarget(null)
+    generateSdfPass.material.dispose()
+  }
+
   render(mode) {
     if (typeof mode === 'string') this.mode = mode
     if (!this.renderer) return
@@ -161,17 +257,19 @@ export default class ViewerCore {
     if (this.mode === 'segment') {
       this.renderer.render(this.scene, this.camera)
     }
-
-    // volume mode
-    if (this.mode === 'volume') {
+    // volume & volume-segment mode
+    if (this.mode === 'volume' || this.mode === 'volume-segment') {
       this.camera.updateMatrixWorld()
 
-      const texture = this.cmtextures.viridis
-      if (texture) this.volumePass.material.uniforms.cmdata.value = texture
+      const sdft = this.sdfTex
+      const cmt = this.cmtextures.viridis
+      if (cmt) this.volumePass.material.uniforms.cmdata.value = cmt
+      if (sdft) this.volumePass.material.uniforms.sdfTex.value = sdft.texture
 
       this.volumePass.material.uniforms.clim.value.set(0.5, 0.9)
       this.volumePass.material.uniforms.renderstyle.value = 0 // 0: MIP, 1: ISO
       this.volumePass.material.uniforms.renderthreshold.value = 0.15 // For ISO renderstyle
+      this.volumePass.material.uniforms.segmentMode.value = (this.mode === 'volume-segment')
       this.volumePass.material.uniforms.projectionInverse.value.copy(this.camera.projectionMatrixInverse)
       this.volumePass.material.uniforms.sdfTransformInverse.value.copy(new THREE.Matrix4()).invert().premultiply(this.inverseBoundsMatrix).multiply(this.camera.matrixWorld)
       this.volumePass.render(this.renderer)
