@@ -1,6 +1,9 @@
 /public/volume/*
 !/public/volume/.gitkeep
 
+/public/segment/*
+!/public/segment/.gitkeep
+
 # Logs
 logs
 *.log

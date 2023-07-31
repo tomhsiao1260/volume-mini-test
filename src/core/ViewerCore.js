@@ -1,24 +1,27 @@
-import * as THREE from "three"
-import textureViridis from "./textures/cm_viridis.png"
-import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js"
-import { NRRDLoader } from "three/examples/jsm/loaders/NRRDLoader.js"
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
-import { VolumeMaterial } from "./VolumeMaterial.js"
+import * as THREE from 'three'
+import textureViridis from './textures/cm_viridis.png'
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js'
+import { NRRDLoader } from 'three/examples/jsm/loaders/NRRDLoader.js'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { VolumeMaterial } from './VolumeMaterial.js'
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 export default class ViewerCore {
   constructor() {
     this.renderer = null
     this.scene = null
     this.camera = null
+    this.mode = null
 
+    this.mesh = null
     this.volumeTex = null
     this.volumeMeta = null
     this.volumeTarget = null
-    this.nrrd = null
-    this.clip = null
+    this.segmentMeta = null
 
     this.render = this.render.bind(this)
-    this.canvas = document.querySelector(".webgl")
+    this.canvas = document.querySelector('.webgl')
     this.inverseBoundsMatrix = new THREE.Matrix4()
     this.cmtextures = { viridis: new THREE.TextureLoader().load(textureViridis) }
 
@@ -46,7 +49,7 @@ export default class ViewerCore {
     this.camera.updateProjectionMatrix()
 
     window.addEventListener(
-      "resize",
+      'resize',
       () => {
         this.camera.aspect = window.innerWidth / window.innerHeight
         this.camera.updateProjectionMatrix()
@@ -57,15 +60,21 @@ export default class ViewerCore {
     );
 
     const controls = new OrbitControls(this.camera, this.canvas)
-    controls.addEventListener("change", this.render)
+    controls.addEventListener('change', this.render)
   }
 
   clear() {
-    if (this.volumeTex) { this.volumeTex.dispose() }   
+    if (this.volumeTex) { this.volumeTex.dispose() }
+
+    if (this.mesh) {
+      this.mesh.geometry.dispose()
+      this.mesh.material.dispose()
+      this.scene.remove(this.mesh)
+    }  
   }
 
   async updateVolume(id) {
-    if (!this.volumeMeta) { this.volumeMeta = await fetch("volume/meta.json").then((res) => res.json()) }
+    if (!this.volumeMeta) { this.volumeMeta = await fetch('volume/meta.json').then((res) => res.json()) }
 
     this.volumeTarget = this.volumeMeta.nrrd[id]
     this.clip = this.volumeTarget.clip
@@ -82,7 +91,7 @@ export default class ViewerCore {
     this.inverseBoundsMatrix.copy(matrix).invert()
 
     await new NRRDLoader()
-      .loadAsync("volume/" + this.volumeTarget.id + ".nrrd")
+      .loadAsync('volume/' + this.volumeTarget.id + '.nrrd')
       .then((volume) => {
         this.volumeTex = new THREE.Data3DTexture(volume.data, volume.xLength, volume.yLength, volume.zLength)
 
@@ -99,19 +108,76 @@ export default class ViewerCore {
       })
   }
 
-  render() {
+  async updateSegment(id) {
+    if (!this.volumeMeta) { this.volumeMeta = await fetch("volume/meta.json").then((res) => res.json()) }
+    if (!this.segmentMeta) { this.segmentMeta = await fetch('segment/meta.json').then((res) => res.json()) }
+
+    const volumeTarget = this.volumeMeta.nrrd[id]
+    const clip = volumeTarget.clip
+    const nrrd = volumeTarget.shape
+
+    // select necessary segment to list
+    const segmentList = []
+
+    for (let i = 0; i < this.segmentMeta.obj.length; i++) {
+      const segmentTarget = this.segmentMeta.obj[i]
+      const c0 = volumeTarget.clip
+      const c1 = segmentTarget.clip
+
+      if (c0.x + c0.w >= c1.x && c1.x + c1.w >= c0.x) {
+        if (c0.y + c0.h >= c1.y && c1.y + c1.h >= c0.y) {
+          if (c0.z + c0.d >= c1.z && c1.z + c1.d >= c0.z) {
+            segmentList.push(segmentTarget.id)
+          }
+        }
+      }
+    }
+
+    // segment loading
+    const promiseList = []
+    const geometryList = []
+
+    for (let i = 0; i < segmentList.length; i++) {
+      const loading = new OBJLoader()
+        .loadAsync('segment/' + segmentList[i] + '.obj')
+        .then((object) => { geometryList.push(object.children[0].geometry) })
+
+      promiseList.push(loading)
+    }
+    await Promise.all(promiseList)
+
+    // turn all segment into single geometry
+    const geometry = BufferGeometryUtils.mergeGeometries(geometryList, true)
+    const material = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
+
+    this.mesh = new THREE.Mesh(geometry, material)
+    this.mesh.scale.set(1/clip.w, 1/clip.w, 1/clip.w)
+    this.scene.add(this.mesh)
+
+    // clear the original geometry
+    for (let i = 0; i < geometryList.length; i ++) { geometryList[i].dispose() }
+  }
+
+  render(mode) {
+    if (typeof mode === 'string') this.mode = mode
     if (!this.renderer) return
 
-    this.camera.updateMatrixWorld()
+    if (this.mode === 'segment') {
 
-    const texture = this.cmtextures.viridis
-    if (texture) this.volumePass.material.uniforms.cmdata.value = texture
+      this.renderer.render(this.scene, this.camera)
 
-    this.volumePass.material.uniforms.clim.value.set(0.5, 0.9)
-    this.volumePass.material.uniforms.renderstyle.value = 0 // 0: MIP, 1: ISO
-    this.volumePass.material.uniforms.renderthreshold.value = 0.15 // For ISO renderstyle
-    this.volumePass.material.uniforms.projectionInverse.value.copy(this.camera.projectionMatrixInverse)
-    this.volumePass.material.uniforms.sdfTransformInverse.value.copy(new THREE.Matrix4()).invert().premultiply(this.inverseBoundsMatrix).multiply(this.camera.matrixWorld)
-    this.volumePass.render(this.renderer)
+    } else if (this.mode === 'volume') {
+      this.camera.updateMatrixWorld()
+
+      const texture = this.cmtextures.viridis
+      if (texture) this.volumePass.material.uniforms.cmdata.value = texture
+
+      this.volumePass.material.uniforms.clim.value.set(0.5, 0.9)
+      this.volumePass.material.uniforms.renderstyle.value = 0 // 0: MIP, 1: ISO
+      this.volumePass.material.uniforms.renderthreshold.value = 0.15 // For ISO renderstyle
+      this.volumePass.material.uniforms.projectionInverse.value.copy(this.camera.projectionMatrixInverse)
+      this.volumePass.material.uniforms.sdfTransformInverse.value.copy(new THREE.Matrix4()).invert().premultiply(this.inverseBoundsMatrix).multiply(this.camera.matrixWorld)
+      this.volumePass.render(this.renderer)
+    }
   }
 }
