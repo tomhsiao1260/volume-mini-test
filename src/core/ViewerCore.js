@@ -113,45 +113,40 @@ export default class ViewerCore {
     if (!this.segmentMeta) { this.segmentMeta = await fetch('segment/meta.json').then((res) => res.json()) }
 
     const volumeTarget = this.volumeMeta.nrrd[id]
-    const clip = volumeTarget.clip
-    const nrrd = volumeTarget.shape
+    const vc = volumeTarget.clip
 
     // select necessary segment to list
     const segmentList = []
+    const geometryList = []
 
     for (let i = 0; i < this.segmentMeta.obj.length; i++) {
       const segmentTarget = this.segmentMeta.obj[i]
-      const c0 = volumeTarget.clip
-      const c1 = segmentTarget.clip
+      const sc = segmentTarget.clip
 
-      if (c0.x + c0.w >= c1.x && c1.x + c1.w >= c0.x) {
-        if (c0.y + c0.h >= c1.y && c1.y + c1.h >= c0.y) {
-          if (c0.z + c0.d >= c1.z && c1.z + c1.d >= c0.z) {
-            segmentList.push(segmentTarget.id)
+      if (vc.x + vc.w >= sc.x && sc.x + sc.w >= vc.x) {
+        if (vc.y + vc.h >= sc.y && sc.y + sc.h >= vc.y) {
+          if (vc.z + vc.d >= sc.z && sc.z + sc.d >= vc.z) {
+            const loading = new OBJLoader()
+              .loadAsync('segment/' + segmentTarget.id + '.obj')
+              .then((object) => { geometryList.push(object.children[0].geometry) })
+
+            segmentList.push(loading)
           }
         }
       }
     }
-
-    // segment loading
-    const promiseList = []
-    const geometryList = []
-
-    for (let i = 0; i < segmentList.length; i++) {
-      const loading = new OBJLoader()
-        .loadAsync('segment/' + segmentList[i] + '.obj')
-        .then((object) => { geometryList.push(object.children[0].geometry) })
-
-      promiseList.push(loading)
-    }
-    await Promise.all(promiseList)
+    await Promise.all(segmentList)
 
     // turn all segment into single geometry
     const geometry = BufferGeometryUtils.mergeGeometries(geometryList, true)
     const material = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
 
+    const scalar = 1 / vc.w
+    const center = new THREE.Vector3(vc.x - vc.w/2, vc.y - vc.h/2, vc.z - vc.d/2)
+
     this.mesh = new THREE.Mesh(geometry, material)
-    this.mesh.scale.set(1/clip.w, 1/clip.w, 1/clip.w)
+    this.mesh.scale.multiplyScalar(scalar)
+    this.mesh.position.add(center.multiplyScalar(scalar))
     this.scene.add(this.mesh)
 
     // clear the original geometry
@@ -162,11 +157,13 @@ export default class ViewerCore {
     if (typeof mode === 'string') this.mode = mode
     if (!this.renderer) return
 
+    // segment mode
     if (this.mode === 'segment') {
-
       this.renderer.render(this.scene, this.camera)
+    }
 
-    } else if (this.mode === 'volume') {
+    // volume mode
+    if (this.mode === 'volume') {
       this.camera.updateMatrixWorld()
 
       const texture = this.cmtextures.viridis
