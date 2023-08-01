@@ -1,14 +1,13 @@
 import * as THREE from 'three'
+import Loader from '../Loader'
 import textureViridis from './textures/cm_viridis.png'
 import { MeshBVH } from 'three-mesh-bvh'
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js'
-import { NRRDLoader } from 'three/examples/jsm/loaders/NRRDLoader.js'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils'
 
-import { VolumeMaterial } from './VolumeMaterial.js'
-import { GenerateSDFMaterial } from './GenerateSDFMaterial.js'
+import { VolumeMaterial } from './VolumeMaterial'
+import { GenerateSDFMaterial } from './GenerateSDFMaterial'
 
 export default class ViewerCore {
   constructor() {
@@ -20,9 +19,7 @@ export default class ViewerCore {
     this.mesh = null
     this.sdfTex = null
     this.volumeTex = null
-    this.volumeMeta = null
     this.volumeTarget = null
-    this.segmentMeta = null
     this.clipGeometry = null
 
     this.render = this.render.bind(this)
@@ -30,6 +27,10 @@ export default class ViewerCore {
     this.inverseBoundsMatrix = new THREE.Matrix4()
     this.cmtextures = { viridis: new THREE.TextureLoader().load(textureViridis) }
     this.volumePass = new FullScreenQuad(new VolumeMaterial())
+
+    this.loader = new Loader()
+    this.volumeMeta = this.loader.getVolumeMeta()
+    this.segmentMeta = this.loader.getSegmentMeta()
 
     this.init()
   }
@@ -81,25 +82,22 @@ export default class ViewerCore {
   }
 
   async updateVolume(id) {
-    if (!this.volumeMeta) { this.volumeMeta = await fetch('volume/meta.json').then((res) => res.json()) }
-
-    this.volumeTarget = this.volumeMeta.nrrd[id]
-    this.clip = this.volumeTarget.clip
-    this.nrrd = this.volumeTarget.shape
+    const volumeMeta = await this.volumeMeta
+    const volumeTarget = volumeMeta.nrrd[id]
+    const clip = volumeTarget.clip
+    const nrrd = volumeTarget.shape
 
     const matrix = new THREE.Matrix4()
     const center = new THREE.Vector3()
     const quat = new THREE.Quaternion()
     const scaling = new THREE.Vector3()
-    const s = 1 / Math.max(this.nrrd.w, this.nrrd.h, this.nrrd.d)
+    const s = 1 / Math.max(nrrd.w, nrrd.h, nrrd.d)
 
-    scaling.set(this.nrrd.w * s, this.nrrd.h * s, this.nrrd.d * s)
+    scaling.set(nrrd.w * s, nrrd.h * s, nrrd.d * s)
     matrix.compose(center, quat, scaling)
     this.inverseBoundsMatrix.copy(matrix).invert()
 
-    await new NRRDLoader()
-      .loadAsync('volume/' + this.volumeTarget.id + '.nrrd')
-      .then((volume) => {
+    await this.loader.getVolumeData(volumeTarget.id + '.nrrd').then((volume) => {
         this.volumeTex = new THREE.Data3DTexture(volume.data, volume.xLength, volume.yLength, volume.zLength)
 
         this.volumeTex.format = THREE.RedFormat
@@ -116,25 +114,24 @@ export default class ViewerCore {
   }
 
   async updateSegment(id) {
-    if (!this.volumeMeta) { this.volumeMeta = await fetch("volume/meta.json").then((res) => res.json()) }
-    if (!this.segmentMeta) { this.segmentMeta = await fetch('segment/meta.json').then((res) => res.json()) }
+    const volumeMeta = await this.volumeMeta
+    const segmentMeta = await this.segmentMeta
 
-    const volumeTarget = this.volumeMeta.nrrd[id]
+    const volumeTarget = volumeMeta.nrrd[id]
     const vc = volumeTarget.clip
 
     // select necessary segment to list
     const segmentList = []
     const geometryList = []
 
-    for (let i = 0; i < this.segmentMeta.obj.length; i++) {
-      const segmentTarget = this.segmentMeta.obj[i]
+    for (let i = 0; i < segmentMeta.obj.length; i++) {
+      const segmentTarget = segmentMeta.obj[i]
       const sc = segmentTarget.clip
 
       if (vc.x + vc.w >= sc.x && sc.x + sc.w >= vc.x) {
         if (vc.y + vc.h >= sc.y && sc.y + sc.h >= vc.y) {
           if (vc.z + vc.d >= sc.z && sc.z + sc.d >= vc.z) {
-            const loading = new OBJLoader()
-              .loadAsync('segment/' + segmentTarget.id + '.obj')
+            const loading = this.loader.getSegmentData(segmentTarget.id + '.obj')
               .then((object) => { geometryList.push(object.children[0].geometry) })
 
             segmentList.push(loading)
@@ -160,8 +157,9 @@ export default class ViewerCore {
     for (let i = 0; i < geometryList.length; i ++) { geometryList[i].dispose() }
   }
 
-  clipSegment(id) {
-    const volumeTarget = this.volumeMeta.nrrd[id]
+  async clipSegment(id) {
+    const volumeMeta = await this.volumeMeta
+    const volumeTarget = volumeMeta.nrrd[id]
     const clip = volumeTarget.clip
     const nrrd = volumeTarget.shape
 
@@ -206,8 +204,9 @@ export default class ViewerCore {
     this.clipGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(c_normals), 3))
   }
 
-  updateSegmentSDF(id) {
-    const volumeTarget = this.volumeMeta.nrrd[id]
+  async updateSegmentSDF(id) {
+    const volumeMeta = await this.volumeMeta
+    const volumeTarget = volumeMeta.nrrd[id]
     const clip = volumeTarget.clip
     const nrrd = volumeTarget.shape
 
