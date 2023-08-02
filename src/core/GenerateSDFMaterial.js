@@ -31,7 +31,9 @@ export class GenerateSDFMaterial extends ShaderMaterial {
 				${shaderDistanceFunction}
 				varying vec2 vUv;
         uniform BVH bvh;
-				uniform float zValue;
+				// uniform float zValue;
+        // change
+        uniform int zValue;
 				uniform mat4 matrix;
 				void main() {
           // compute the point in space to check

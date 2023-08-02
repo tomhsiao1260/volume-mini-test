@@ -217,7 +217,9 @@ export default class ViewerCore {
     const s = 1 / Math.max(nrrd.w, nrrd.h, nrrd.d)
 
     // create a new 3d render target texture
-    this.sdfTex = new THREE.WebGL3DRenderTarget(nrrd.w * r, nrrd.h * r, nrrd.d * r)
+    // this.sdfTex = new THREE.WebGL3DRenderTarget(nrrd.w * r, nrrd.h * r, nrrd.d * r)
+    // change
+    this.sdfTex = new THREE.WebGLArrayRenderTarget(nrrd.w * r, nrrd.h * r, nrrd.d * r)
     this.sdfTex.texture.format = THREE.RedFormat
     // this.sdfTex.texture.format = THREE.RGFormat
     this.sdfTex.texture.type = THREE.FloatType
@@ -243,7 +245,9 @@ export default class ViewerCore {
     const halfWidth = 0.5 * pxWidth
 
     for (let i = 0; i < nrrd.d * r; i++) {
-      generateSdfPass.material.uniforms.zValue.value = i * pxWidth + halfWidth
+      // generateSdfPass.material.uniforms.zValue.value = i * pxWidth + halfWidth
+      // change
+      generateSdfPass.material.uniforms.zValue.value = i
       this.renderer.setRenderTarget(this.sdfTex, i)
       generateSdfPass.render(this.renderer)
     }

@@ -34,10 +34,14 @@ export class VolumeMaterial extends ShaderMaterial {
 
       fragmentShader: /* glsl */ `
         precision highp sampler3D;
+        // change
+        precision highp sampler2DArray;
 				varying vec2 vUv;
         uniform vec2 clim;
         uniform vec3 size;
-        uniform sampler3D sdfTex;
+        // uniform sampler3D sdfTex;
+        // change
+        uniform sampler2DArray sdfTex;
         uniform sampler3D voldata;
         uniform sampler2D cmdata;
         uniform mat4 projectionInverse;
@@ -75,6 +79,9 @@ export class VolumeMaterial extends ShaderMaterial {
 
 				void main() {
           float fragCoordZ = -1.;
+
+          // float v = texture(sdfTex, vec3( vUv, 1.0 )).r;
+          // gl_FragColor = vec4(v, v, v, 1.0); return;
 
           // get the inverse of the sdf box transform
 					mat4 sdfTransform = inverse( sdfTransformInverse );
@@ -115,11 +122,14 @@ export class VolumeMaterial extends ShaderMaterial {
                 // sdf box extends from - 0.5 to 0.5
                 // transform into the local bounds space [ 0, 1 ] and check if we're inside the bounds
                 vec3 uv = ( sdfTransformInverse * nearPoint ).xyz + vec3( 0.5 );
+                // change
+                vec3 uvc =  vec3(uv.xy, uv.z * 5.0);
                 if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || uv.z < 0.0 || uv.z > 1.0 ) {
                   break;
                 }
                 // get the distance to surface and exit the loop if we're close to the surface
-                float distanceToSurface = texture2D( sdfTex, uv ).r - surface;
+                // change
+                float distanceToSurface = texture2D( sdfTex, uvc ).r - surface;
                 if ( distanceToSurface < SURFACE_EPSILON ) {
                   intersectsSurface = true;
                   break;
@@ -133,11 +143,14 @@ export class VolumeMaterial extends ShaderMaterial {
                 // sdf box extends from - 0.5 to 0.5
                 // transform into the local bounds space [ 0, 1 ] and check if we're inside the bounds
                 vec3 uv = ( sdfTransformInverse * farPoint ).xyz + vec3( 0.5 );
+                // change
+                vec3 uvc =  vec3(uv.xy, uv.z * 5.0);
                 if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || uv.z < 0.0 || uv.z > 1.0 ) {
                   break;
                 }
                 // get the distance to surface and exit the loop if we're close to the surface
-                float distanceToSurface = texture2D( sdfTex, uv ).r - surface;
+                // change
+                float distanceToSurface = texture2D( sdfTex, uvc ).r - surface;
                 if ( distanceToSurface < SURFACE_EPSILON ) {
                   intersectsSurface = true;
                   break;
