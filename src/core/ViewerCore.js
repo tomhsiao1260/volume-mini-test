@@ -32,6 +32,9 @@ export default class ViewerCore {
     this.volumeMeta = this.loader.getVolumeMeta()
     this.segmentMeta = this.loader.getSegmentMeta()
 
+    this.params = {}
+    this.params.surface = 0.005
+
     this.init()
   }
 
@@ -267,6 +270,7 @@ export default class ViewerCore {
 
       this.volumePass.material.uniforms.clim.value.set(0.5, 0.9)
       this.volumePass.material.uniforms.renderstyle.value = 0 // 0: MIP, 1: ISO
+      this.volumePass.material.uniforms.surface.value = this.params.surface
       this.volumePass.material.uniforms.renderthreshold.value = 0.15 // For ISO renderstyle
       this.volumePass.material.uniforms.segmentMode.value = (this.mode === 'volume-segment')
       this.volumePass.material.uniforms.projectionInverse.value.copy(this.camera.projectionMatrixInverse)

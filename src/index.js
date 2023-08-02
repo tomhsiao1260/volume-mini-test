@@ -1,9 +1,16 @@
 import Loader from './Loader'
 import ViewerCore from './core/ViewerCore'
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min'
 
+// init setup
 const viewer = new ViewerCore()
 modeC(viewer, 0)
 
+// GUI controls
+const gui = new GUI()
+gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(() => viewer.render())
+
+// switch mode
 document.addEventListener('keydown', function(event) {
   if (event.code === 'Digit0') { modeA(viewer, 0) }
   if (event.code === 'Digit1') { modeB(viewer, 0) }
