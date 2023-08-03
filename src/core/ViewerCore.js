@@ -28,9 +28,8 @@ export default class ViewerCore {
     this.cmtextures = { viridis: new THREE.TextureLoader().load(textureViridis) }
     this.volumePass = new FullScreenQuad(new VolumeMaterial())
 
-    this.loader = new Loader()
-    this.volumeMeta = this.loader.getVolumeMeta()
-    this.segmentMeta = this.loader.getSegmentMeta()
+    this.volumeMeta = Loader.getVolumeMeta()
+    this.segmentMeta = Loader.getSegmentMeta()
 
     this.params = {}
     this.params.surface = 0.005
@@ -100,7 +99,7 @@ export default class ViewerCore {
     matrix.compose(center, quat, scaling)
     this.inverseBoundsMatrix.copy(matrix).invert()
 
-    await this.loader.getVolumeData(volumeTarget.id + '.nrrd').then((volume) => {
+    await Loader.getVolumeData(volumeTarget.id + '.nrrd').then((volume) => {
         this.volumeTex = new THREE.Data3DTexture(volume.data, volume.xLength, volume.yLength, volume.zLength)
 
         this.volumeTex.format = THREE.RedFormat
@@ -134,7 +133,7 @@ export default class ViewerCore {
       if (vc.x + vc.w >= sc.x && sc.x + sc.w >= vc.x) {
         if (vc.y + vc.h >= sc.y && sc.y + sc.h >= vc.y) {
           if (vc.z + vc.d >= sc.z && sc.z + sc.d >= vc.z) {
-            const loading = this.loader.getSegmentData(segmentTarget.id + '.obj')
+            const loading = Loader.getSegmentData(segmentTarget.id + '.obj')
               .then((object) => { geometryList.push(object.children[0].geometry) })
 
             segmentList.push(loading)

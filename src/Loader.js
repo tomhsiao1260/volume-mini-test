@@ -5,11 +5,11 @@ export default class Loader {
   constructor() {
   }
 
-  getVolumeMeta() { return fetch('volume/meta.json').then((res) => res.json()) }
+  static getVolumeMeta() { return fetch('volume/meta.json').then((res) => res.json()) }
 
-  getSegmentMeta() { return fetch('segment/meta.json').then((res) => res.json()) }
+  static getSegmentMeta() { return fetch('segment/meta.json').then((res) => res.json()) }
 
-  getVolumeData(filename) { return new NRRDLoader().loadAsync('volume/' + filename) }
+  static getVolumeData(filename) { return new NRRDLoader().loadAsync('volume/' + filename) }
 
-  getSegmentData(filename) { return new OBJLoader().loadAsync('segment/' + filename) }
+  static getSegmentData(filename) { return new OBJLoader().loadAsync('segment/' + filename) }
 }
