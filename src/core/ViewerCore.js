@@ -10,7 +10,7 @@ import { VolumeMaterial } from './VolumeMaterial'
 import { GenerateSDFMaterial } from './GenerateSDFMaterial'
 
 export default class ViewerCore {
-  constructor() {
+  constructor({ volumeMeta, segmentMeta }) {
     this.renderer = null
     this.scene = null
     this.camera = null
@@ -22,22 +22,23 @@ export default class ViewerCore {
     this.volumeTarget = null
     this.clipGeometry = null
 
+    this.volumeMeta = volumeMeta
+    this.segmentMeta = segmentMeta
     this.render = this.render.bind(this)
     this.canvas = document.querySelector('.webgl')
     this.inverseBoundsMatrix = new THREE.Matrix4()
     this.cmtextures = { viridis: new THREE.TextureLoader().load(textureViridis) }
     this.volumePass = new FullScreenQuad(new VolumeMaterial())
 
-    this.volumeMeta = Loader.getVolumeMeta()
-    this.segmentMeta = Loader.getSegmentMeta()
-
     this.params = {}
+    this.params.mode = 'segment'
     this.params.surface = 0.005
+    this.params.layers = { select: 0, options: {} }
 
     this.init()
   }
 
-  async init() {
+  init() {
     // renderer setup
     this.renderer = new THREE.WebGLRenderer({ antialias: true, canvas: this.canvas })
     this.renderer.setPixelRatio(window.devicePixelRatio)
@@ -64,10 +65,18 @@ export default class ViewerCore {
         this.render()
       },
       false
-    );
+    )
 
     const controls = new OrbitControls(this.camera, this.canvas)
     controls.addEventListener('change', this.render)
+
+    // list all layer options
+    for (let i = 0; i < this.volumeMeta.nrrd.length; i++) {
+      const { clip } = this.volumeMeta.nrrd[i]
+      const start = clip.z
+      const end = clip.z + clip.d
+      this.params.layers.options[ `${start} to ${end}` ] = i
+    }
   }
 
   clear() {
@@ -83,9 +92,11 @@ export default class ViewerCore {
     } 
   }
 
-  async updateVolume(id) {
-    const volumeMeta = await this.volumeMeta
-    const volumeTarget = volumeMeta.nrrd[id]
+  async updateVolume() {
+    if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
+
+    const id = this.params.layers.select
+    const volumeTarget = this.volumeMeta.nrrd[id]
     const clip = volumeTarget.clip
     const nrrd = volumeTarget.shape
 
@@ -115,19 +126,20 @@ export default class ViewerCore {
       })
   }
 
-  async updateSegment(id) {
-    const volumeMeta = await this.volumeMeta
-    const segmentMeta = await this.segmentMeta
+  async updateSegment() {
+    if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
+    if (!this.segmentMeta) { console.log('segment meta.json not found'); return }
 
-    const volumeTarget = volumeMeta.nrrd[id]
+    const id = this.params.layers.select
+    const volumeTarget = this.volumeMeta.nrrd[id]
     const vc = volumeTarget.clip
 
     // select necessary segment to list
     const segmentList = []
     const geometryList = []
 
-    for (let i = 0; i < segmentMeta.obj.length; i++) {
-      const segmentTarget = segmentMeta.obj[i]
+    for (let i = 0; i < this.segmentMeta.obj.length; i++) {
+      const segmentTarget = this.segmentMeta.obj[i]
       const sc = segmentTarget.clip
 
       if (vc.x + vc.w >= sc.x && sc.x + sc.w >= vc.x) {
@@ -159,9 +171,11 @@ export default class ViewerCore {
     for (let i = 0; i < geometryList.length; i ++) { geometryList[i].dispose() }
   }
 
-  async clipSegment(id) {
-    const volumeMeta = await this.volumeMeta
-    const volumeTarget = volumeMeta.nrrd[id]
+  clipSegment() {
+    if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
+
+    const id = this.params.layers.select
+    const volumeTarget = this.volumeMeta.nrrd[id]
     const clip = volumeTarget.clip
     const nrrd = volumeTarget.shape
 
@@ -206,9 +220,11 @@ export default class ViewerCore {
     this.clipGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(c_normals), 3))
   }
 
-  async updateSegmentSDF(id) {
-    const volumeMeta = await this.volumeMeta
-    const volumeTarget = volumeMeta.nrrd[id]
+  updateSegmentSDF() {
+    if (!this.volumeMeta) { console.log('volume meta.json not found'); return }
+
+    const id = this.params.layers.select
+    const volumeTarget = this.volumeMeta.nrrd[id]
     const clip = volumeTarget.clip
     const nrrd = volumeTarget.shape
 
@@ -255,15 +271,14 @@ export default class ViewerCore {
   }
 
   render(mode) {
-    if (typeof mode === 'string') this.mode = mode
     if (!this.renderer) return
 
     // segment mode
-    if (this.mode === 'segment') {
+    if (this.params.mode === 'segment') {
       this.renderer.render(this.scene, this.camera)
     }
     // volume & volume-segment mode
-    if (this.mode === 'volume' || this.mode === 'volume-segment') {
+    if (this.params.mode === 'volume' || this.params.mode === 'volume-segment') {
       this.camera.updateMatrixWorld()
 
       const sdft = this.sdfTex
@@ -275,7 +290,7 @@ export default class ViewerCore {
       this.volumePass.material.uniforms.renderstyle.value = 0 // 0: MIP, 1: ISO
       this.volumePass.material.uniforms.surface.value = this.params.surface
       this.volumePass.material.uniforms.renderthreshold.value = 0.15 // For ISO renderstyle
-      this.volumePass.material.uniforms.segmentMode.value = (this.mode === 'volume-segment')
+      this.volumePass.material.uniforms.segmentMode.value = (this.params.mode === 'volume-segment')
       this.volumePass.material.uniforms.projectionInverse.value.copy(this.camera.projectionMatrixInverse)
       this.volumePass.material.uniforms.sdfTransformInverse.value.copy(new THREE.Matrix4()).invert().premultiply(this.inverseBoundsMatrix).multiply(this.camera.matrixWorld)
       this.volumePass.render(this.renderer)
