@@ -8,6 +8,7 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 
 import { VolumeMaterial } from './VolumeMaterial'
 import { GenerateSDFMaterial } from './GenerateSDFMaterial'
+import { RenderSDFLayerMaterial } from './RenderSDFLayerMaterial'
 
 export default class ViewerCore {
   constructor({ volumeMeta, segmentMeta }) {
@@ -29,10 +30,14 @@ export default class ViewerCore {
     this.inverseBoundsMatrix = new THREE.Matrix4()
     this.cmtextures = { viridis: new THREE.TextureLoader().load(textureViridis) }
     this.volumePass = new FullScreenQuad(new VolumeMaterial())
+    this.layerPass = new FullScreenQuad(new RenderSDFLayerMaterial())
 
     this.params = {}
-    this.params.mode = 'segment'
+    this.params.mode = 'layer'
+    // this.params.mode = 'segment'
     this.params.surface = 0.005
+    this.params.layer = 0
+    this.params.inverse = false
     this.params.layers = { select: 0, options: {} }
 
     this.init()
@@ -120,9 +125,9 @@ export default class ViewerCore {
         this.volumeTex.unpackAlignment = 1
         this.volumeTex.needsUpdate = true
 
-        const material = this.volumePass.material
-        material.uniforms.voldata.value = this.volumeTex
-        material.uniforms.size.value.set(volume.xLength, volume.yLength, volume.zLength)
+        this.layerPass.material.uniforms.voldata.value = this.volumeTex
+        this.volumePass.material.uniforms.voldata.value = this.volumeTex
+        this.volumePass.material.uniforms.size.value.set(volume.xLength, volume.yLength, volume.zLength)
       })
   }
 
@@ -270,7 +275,7 @@ export default class ViewerCore {
     generateSdfPass.material.dispose()
   }
 
-  render(mode) {
+  render() {
     if (!this.renderer) return
 
     // segment mode
@@ -281,6 +286,9 @@ export default class ViewerCore {
     if (this.params.mode === 'volume' || this.params.mode === 'volume-segment') {
       this.camera.updateMatrixWorld()
 
+      const id = this.params.layers.select
+      const clip = this.volumeMeta.nrrd[id].clip
+
       const sdft = this.sdfTex
       const cmt = this.cmtextures.viridis
       if (cmt) this.volumePass.material.uniforms.cmdata.value = cmt
@@ -289,11 +297,39 @@ export default class ViewerCore {
       this.volumePass.material.uniforms.clim.value.set(0.5, 0.9)
       this.volumePass.material.uniforms.renderstyle.value = 0 // 0: MIP, 1: ISO
       this.volumePass.material.uniforms.surface.value = this.params.surface
+      // change
+      this.volumePass.material.uniforms.thickness.value = clip.d
       this.volumePass.material.uniforms.renderthreshold.value = 0.15 // For ISO renderstyle
       this.volumePass.material.uniforms.segmentMode.value = (this.params.mode === 'volume-segment')
       this.volumePass.material.uniforms.projectionInverse.value.copy(this.camera.projectionMatrixInverse)
       this.volumePass.material.uniforms.sdfTransformInverse.value.copy(new THREE.Matrix4()).invert().premultiply(this.inverseBoundsMatrix).multiply(this.camera.matrixWorld)
       this.volumePass.render(this.renderer)
+    }
+    // layer & grid layer mode
+    if (this.params.mode === 'layer' || this.params.mode === 'grid layer') {
+      const id = this.params.layers.select
+      const clip = this.volumeMeta.nrrd[id].clip
+
+      const sdft = this.sdfTex
+      const cmt = this.cmtextures.viridis
+      if (cmt) this.layerPass.material.uniforms.cmdata.value = cmt
+      if (sdft) this.layerPass.material.uniforms.sdfTex.value = sdft.texture
+
+      const gridMode = this.params.mode === 'layer' ? 0 : 1
+      if (gridMode !== this.layerPass.material.defines.DISPLAY_GRID) {
+        this.layerPass.material.defines.DISPLAY_GRID = gridMode
+        this.layerPass.needsUpdate = true
+      }
+
+      this.layerPass.material.uniforms.clim.value.set(0.5, 0.9)
+      this.layerPass.material.uniforms.inverse.value = this.params.inverse
+      this.layerPass.material.uniforms.surface.value = this.params.surface
+      // change
+      this.layerPass.material.uniforms.thickness.value = clip.d
+      this.layerPass.material.uniforms.layer.value = (this.params.layer - clip.z) / clip.d
+      this.layerPass.material.uniforms.volumeAspect.value = clip.w / clip.h
+      this.layerPass.material.uniforms.screenAspect.value = this.camera.aspect
+      this.layerPass.render(this.renderer)
     }
   }
 }

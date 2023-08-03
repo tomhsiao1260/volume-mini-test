@@ -15,6 +15,8 @@ export class VolumeMaterial extends ShaderMaterial {
         sdfTex: { value: null },
         voldata: { value: null },
         cmdata: { value: null },
+        // change
+        thickness: { value: 0 },
         segmentMode: { value: false },
         size: { value: new Vector3() },
         clim: { value: new Vector2() },
@@ -42,6 +44,8 @@ export class VolumeMaterial extends ShaderMaterial {
         // uniform sampler3D sdfTex;
         // change
         uniform sampler2DArray sdfTex;
+        // change
+        uniform float thickness;
         uniform sampler3D voldata;
         uniform sampler2D cmdata;
         uniform mat4 projectionInverse;
@@ -123,7 +127,7 @@ export class VolumeMaterial extends ShaderMaterial {
                 // transform into the local bounds space [ 0, 1 ] and check if we're inside the bounds
                 vec3 uv = ( sdfTransformInverse * nearPoint ).xyz + vec3( 0.5 );
                 // change
-                vec3 uvc =  vec3(uv.xy, uv.z * 5.0);
+                vec3 uvc =  vec3(uv.xy, uv.z * thickness);
                 if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || uv.z < 0.0 || uv.z > 1.0 ) {
                   break;
                 }
@@ -144,7 +148,7 @@ export class VolumeMaterial extends ShaderMaterial {
                 // transform into the local bounds space [ 0, 1 ] and check if we're inside the bounds
                 vec3 uv = ( sdfTransformInverse * farPoint ).xyz + vec3( 0.5 );
                 // change
-                vec3 uvc =  vec3(uv.xy, uv.z * 5.0);
+                vec3 uvc =  vec3(uv.xy, uv.z * thickness);
                 if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || uv.z < 0.0 || uv.z > 1.0 ) {
                   break;
                 }

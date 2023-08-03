@@ -19,11 +19,13 @@ function update(viewer) {
 }
 
 function updateViewer(viewer) {
-  const { mode, layers } = viewer.params
+  const { mode } = viewer.params
 
   if (mode === 'segment') { modeA(viewer) }
   if (mode === 'volume') { modeB(viewer) }
   if (mode === 'volume-segment') { modeC(viewer) }
+  if (mode === 'layer') { modeC(viewer) }
+  if (mode === 'grid layer') { modeC(viewer) }
 }
 
 let gui
@@ -33,7 +35,7 @@ function updateGUI(viewer) {
 
   if (gui) { gui.destroy() }
   gui = new GUI()
-  gui.add(viewer.params, 'mode', ['segment', 'volume', 'volume-segment']).onChange(() => update(viewer))
+  gui.add(viewer.params, 'mode', ['segment', 'volume', 'volume-segment', 'layer', 'grid layer']).onChange(() => update(viewer))
 
   if (mode === 'segment') { return }
   if (mode === 'volume') {
@@ -41,6 +43,20 @@ function updateGUI(viewer) {
   }
   if (mode === 'volume-segment') {
     gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(viewer.render)
+  }
+  if (mode === 'layer') {
+    const id = viewer.params.layers.select
+    const clip = viewer.volumeMeta.nrrd[id].clip
+
+    gui.add(viewer.params, 'inverse').onChange(viewer.render)
+    gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(viewer.render)
+    gui.add(viewer.params, 'layer', clip.z, clip.z + clip.d, 1).onChange(viewer.render)
+    gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').onChange(() => update(viewer))
+  }
+  if (mode === 'grid layer') {
+    gui.add(viewer.params, 'inverse').onChange(viewer.render)
+    gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(viewer.render)
+    gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').onChange(() => update(viewer))
   }
 }
 
@@ -74,3 +90,4 @@ function modeC(viewer) {
     .then(() => viewer.render())
     .then(() => { console.log(`volume-segment ${viewer.params.layers.select} is loaded`) })
 }
+
