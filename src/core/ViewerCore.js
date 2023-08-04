@@ -35,7 +35,7 @@ export default class ViewerCore {
 
     this.params = {}
     this.params.mode = 'layer'
-    // this.params.mode = 'segment'
+    // this.params.mode = 'volume-segment'
     this.params.surface = 0.005
     this.params.layer = 0
     this.params.inverse = false

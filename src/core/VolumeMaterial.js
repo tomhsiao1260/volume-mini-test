@@ -128,39 +128,40 @@ export class VolumeMaterial extends ShaderMaterial {
                 vec3 uv = ( sdfTransformInverse * nearPoint ).xyz + vec3( 0.5 );
                 // change
                 vec3 uvc =  vec3(uv.xy, uv.z * thickness);
-                if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || uv.z < 0.0 || uv.z > 1.0 ) {
-                  break;
-                }
                 // get the distance to surface and exit the loop if we're close to the surface
                 // change
                 float distanceToSurface = texture2D( sdfTex, uvc ).r - surface;
                 if ( distanceToSurface < SURFACE_EPSILON ) {
                   intersectsSurface = true;
+                  break;
+                }
+                if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || uv.z < 0.0 || uv.z > 1.0 ) {
                   break;
                 }
                 // step the ray
                 nearPoint.xyz += rayDirection * abs( distanceToSurface );
               }
 
-              // ray march (far -> surface)
-              for ( int i = 0; i < MAX_STEPS; i ++ ) {
-                // sdf box extends from - 0.5 to 0.5
-                // transform into the local bounds space [ 0, 1 ] and check if we're inside the bounds
-                vec3 uv = ( sdfTransformInverse * farPoint ).xyz + vec3( 0.5 );
-                // change
-                vec3 uvc =  vec3(uv.xy, uv.z * thickness);
-                if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || uv.z < 0.0 || uv.z > 1.0 ) {
-                  break;
+              if (intersectsSurface) {
+                // ray march (far -> surface)
+                for ( int i = 0; i < MAX_STEPS; i ++ ) {
+                  // sdf box extends from - 0.5 to 0.5
+                  // transform into the local bounds space [ 0, 1 ] and check if we're inside the bounds
+                  vec3 uv = ( sdfTransformInverse * farPoint ).xyz + vec3( 0.5 );
+                  // change
+                  vec3 uvc =  vec3(uv.xy, uv.z * thickness);
+                  // get the distance to surface and exit the loop if we're close to the surface
+                  // change
+                  float distanceToSurface = texture2D( sdfTex, uvc ).r - surface;
+                  if ( distanceToSurface < SURFACE_EPSILON ) {
+                    break;
+                  }
+                  if ( uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || uv.z < 0.0 || uv.z > 1.0 ) {
+                    break;
+                  }
+                  // step the ray
+                  farPoint.xyz -= rayDirection * abs( distanceToSurface );
                 }
-                // get the distance to surface and exit the loop if we're close to the surface
-                // change
-                float distanceToSurface = texture2D( sdfTex, uvc ).r - surface;
-                if ( distanceToSurface < SURFACE_EPSILON ) {
-                  intersectsSurface = true;
-                  break;
-                }
-                // step the ray
-                farPoint.xyz -= rayDirection * abs( distanceToSurface );
               }
             } else {
               intersectsSurface = true;

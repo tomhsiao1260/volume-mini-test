@@ -31,7 +31,7 @@ function updateViewer(viewer) {
 let gui
 
 function updateGUI(viewer) {
-  const { mode, volumeMeta } = viewer.params
+  const { mode } = viewer.params
 
   if (gui) { gui.destroy() }
   gui = new GUI()
