@@ -90,7 +90,7 @@ export class RenderSDFLayerMaterial extends ShaderMaterial {
           if (inverse && dist < 0.0) gl_FragColor = vec4(0, 0, 0, 0.0);
           if (!inverse && dist > 0.0) gl_FragColor = vec4(0, 0, 0, 0.0);
           #endif
-          #include <encodings_fragment>
+          #include <colorspace_fragment>
                 }
             `
     });
