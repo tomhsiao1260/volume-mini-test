@@ -28,6 +28,7 @@ export default class ViewerCore {
     this.render = this.render.bind(this)
     this.canvas = document.querySelector('.webgl')
     this.inverseBoundsMatrix = new THREE.Matrix4()
+    this.boxHelper = new THREE.Box3Helper(new THREE.Box3())
     this.cmtextures = { viridis: new THREE.TextureLoader().load(textureViridis) }
     this.volumePass = new FullScreenQuad(new VolumeMaterial())
     this.layerPass = new FullScreenQuad(new RenderSDFLayerMaterial())
@@ -53,6 +54,7 @@ export default class ViewerCore {
 
     // scene setup
     this.scene = new THREE.Scene()
+    this.scene.add(this.boxHelper)
 
     // camera setup
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 50)
@@ -164,13 +166,16 @@ export default class ViewerCore {
     const geometry = BufferGeometryUtils.mergeGeometries(geometryList)
     const material = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide })
 
-    const scalar = 1 / vc.w
-    const center = new THREE.Vector3(vc.x - vc.w/2, vc.y - vc.h/2, vc.z - vc.d/2)
+    const s = 1 / Math.max(vc.w, vc.h, vc.d)
+    const center = new THREE.Vector3(- vc.x - vc.w/2, - vc.y - vc.h/2, - vc.z - vc.d/2)
 
     this.mesh = new THREE.Mesh(geometry, material)
-    this.mesh.scale.multiplyScalar(scalar)
-    this.mesh.position.add(center.multiplyScalar(scalar))
+    this.mesh.scale.multiplyScalar(s)
+    this.mesh.position.add(center.multiplyScalar(s))
     this.scene.add(this.mesh)
+
+    this.boxHelper.box.max.set(vc.w * s / 2,  vc.h * s / 2,  vc.d * s / 2)
+    this.boxHelper.box.min.set(-vc.w * s / 2, -vc.h * s / 2, -vc.d * s / 2)
 
     // clear the original geometry
     for (let i = 0; i < geometryList.length; i ++) { geometryList[i].dispose() }

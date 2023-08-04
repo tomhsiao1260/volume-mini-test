@@ -36,11 +36,10 @@ function updateGUI(viewer) {
   if (gui) { gui.destroy() }
   gui = new GUI()
   gui.add(viewer.params, 'mode', ['segment', 'volume', 'volume-segment', 'layer', 'grid layer']).onChange(() => update(viewer))
+  gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').onChange(() => update(viewer))
 
   if (mode === 'segment') { return }
-  if (mode === 'volume') {
-    gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').onChange(() => update(viewer))
-  }
+  if (mode === 'volume') { return }
   if (mode === 'volume-segment') {
     gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(viewer.render)
   }
@@ -51,12 +50,10 @@ function updateGUI(viewer) {
     gui.add(viewer.params, 'inverse').onChange(viewer.render)
     gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(viewer.render)
     gui.add(viewer.params, 'layer', clip.z, clip.z + clip.d, 1).onChange(viewer.render)
-    gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').onChange(() => update(viewer))
   }
   if (mode === 'grid layer') {
     gui.add(viewer.params, 'inverse').onChange(viewer.render)
     gui.add(viewer.params, 'surface', 0.001, 0.5).onChange(viewer.render)
-    gui.add(viewer.params.layers, 'select', viewer.params.layers.options).name('layers').onChange(() => update(viewer))
   }
 }
 
